@@ -1,0 +1,30 @@
+Here are the steps need to launch the crypto market monitoring program
+# Here is the path to the folder that holds my python program for market monitoring:
+PS C:\Users\randa\Documents\Crypto_dash>
+
+
+# Here is the script to activate the virtual environment
+./venv/Scripts/Activate.ps1
+
+# In Windows, you may need to set the execution policy (may be optional)
+set-ExecutionPolicy RemoteSigned -scope CurrentUser
+
+
+# Navigating to the folder, and envoking the virtual environment
+PS C:\Users\randa> cd Documents
+PS C:\Users\randa\Documents> cd Crypto_dash
+PS C:\Users\randa\Documents\Crypto_dash> ./venv/Scripts/Activate.ps1
+
+# Now the prompt is the virtual environment
+(venv) PS C:\Users\randa\Documents\Crypto_dash>
+
+# Use Streamlit to run the market charting program "compplex_dash.py" that is located in the Crypto_dash folder
+(run from within the virtual environment)
+
+(venv) PS C:\Users\randa\Documents\Crypto_dash> streamlit run complex_dash.py
+2026-05-09 11:50:01.863 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.0.89:8501
