@@ -89,50 +89,75 @@ def create_treasury_yield_chart(master_df):
 
 def create_stress_composite_chart(stress_df):
     """
-    Create market stress composite index chart with regime coloring.
+    Create market stress composite index chart with Bloomberg-style layered bands and solid neon line.
     
     Args:
-        stress_df (pd.DataFrame): Stress composite dataframe with date index
+        stress_df (pd.DataFrame): Stress composite dataframe
         
     Returns:
-        alt.Chart: Interactive Altair chart
+        alt.Chart: Interactive Altair layered chart
     """
-    stress_chart = alt.Chart(
-        stress_df.reset_index()
-    ).mark_line().encode(
+    # 1. Reset date index and retrieve boundaries
+    df_reset = stress_df.reset_index()
+    min_date = df_reset["date"].min()
+    max_date = df_reset["date"].max()
+
+    # 2. DataFrame for the background color bands
+    bands_df = pd.DataFrame([
+        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "color": "rgba(76, 175, 80, 0.06)",  "regime": "Low Stress"},
+        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "color": "rgba(255, 235, 59, 0.08)", "regime": "Moderate Stress"},
+        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "color": "rgba(255, 152, 0, 0.12)",  "regime": "High Stress"},
+        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "color": "rgba(244, 67, 54, 0.15)",  "regime": "Crisis"}
+    ])
+
+    # 3. Horizontal lines at threshold boundaries
+    rules_df = pd.DataFrame({"y": [25, 50, 75]})
+
+    # 4. Create the background bands layer
+    bands = alt.Chart(bands_df).mark_rect().encode(
+        x=alt.X("start:T", axis=None),
+        x2=alt.X2("end:T"),
+        y=alt.Y("ymin:Q", axis=None),
+        y2=alt.Y2("ymax:Q"),
+        color=alt.Color("color:N", scale=None),
+        tooltip=alt.value(None)  # Disable tooltip on bands to avoid interference
+    )
+
+    # 5. Create horizontal dashed rules layer
+    rules = alt.Chart(rules_df).mark_rule(
+        color="#31333F",
+        strokeWidth=1.5,
+        strokeDash=[4, 4]
+    ).encode(
+        y=alt.Y("y:Q")
+    )
+
+    # 6. Create the main solid trend line layer (Bloomberg neon cyan)
+    line = alt.Chart(df_reset).mark_line(
+        color="#00E5FF",
+        strokeWidth=2.5
+    ).encode(
         x=alt.X(
             "date:T",
             axis=axis_style
         ),
         y=alt.Y(
             "stress_composite:Q",
-            axis=axis_style
-        ),
-        color=alt.Color(
-            "stress_regime:N",
-            scale=alt.Scale(
-                domain=[
-                    "Low Stress",
-                    "Moderate Stress",
-                    "High Stress",
-                    "Crisis"
-                ],
-                range=[
-                    "green",
-                    "yellow",
-                    "orange",
-                    "red"
-                ]
-            )
+            axis=axis_style,
+            scale=alt.Scale(domain=[0, 100]),
+            title="Stress Composite Index"
         ),
         tooltip=[
             "date:T",
-            "stress_composite:Q",
-            "stress_regime:N"
+            alt.Tooltip("stress_composite:Q", format=".2f", label="Stress Score"),
+            alt.Tooltip("stress_regime:N", label="Regime")
         ]
-    ).interactive()
+    )
+
+    # 7. Layer them together
+    chart = alt.layer(bands, rules, line).interactive()
     
-    return stress_chart
+    return chart
 
 def create_component_breakdown_chart(stress_df):
     """

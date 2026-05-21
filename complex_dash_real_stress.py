@@ -652,15 +652,58 @@ try:
         )
     
     # Stress composite chart
-    stress_chart = alt.Chart(stress_df.reset_index()).mark_line().encode(
-        x=alt.X('date:T', axis=axis_style),
-        y=alt.Y('stress_composite:Q', axis=axis_style),
-        color=alt.Color('stress_regime:N', scale=alt.Scale(
-            domain=['Low Stress', 'Moderate Stress', 'High Stress', 'Crisis'],
-            range=['green', 'yellow', 'orange', 'red']
-        )),
-        tooltip=['date:T', 'stress_composite:Q', 'stress_regime:N']
-    ).interactive()
+    df_reset = stress_df.reset_index()
+    min_date = df_reset["date"].min()
+    max_date = df_reset["date"].max()
+
+    bands_df = pd.DataFrame([
+        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "color": "rgba(76, 175, 80, 0.06)",  "regime": "Low Stress"},
+        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "color": "rgba(255, 235, 59, 0.08)", "regime": "Moderate Stress"},
+        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "color": "rgba(255, 152, 0, 0.12)",  "regime": "High Stress"},
+        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "color": "rgba(244, 67, 54, 0.15)",  "regime": "Crisis"}
+    ])
+
+    rules_df = pd.DataFrame({"y": [25, 50, 75]})
+
+    bands = alt.Chart(bands_df).mark_rect().encode(
+        x=alt.X("start:T", axis=None),
+        x2=alt.X2("end:T"),
+        y=alt.Y("ymin:Q", axis=None),
+        y2=alt.Y2("ymax:Q"),
+        color=alt.Color("color:N", scale=None),
+        tooltip=alt.value(None)
+    )
+
+    rules = alt.Chart(rules_df).mark_rule(
+        color="#31333F",
+        strokeWidth=1.5,
+        strokeDash=[4, 4]
+    ).encode(
+        y=alt.Y("y:Q")
+    )
+
+    line = alt.Chart(df_reset).mark_line(
+        color="#00E5FF",
+        strokeWidth=2.5
+    ).encode(
+        x=alt.X(
+            "date:T",
+            axis=axis_style
+        ),
+        y=alt.Y(
+            "stress_composite:Q",
+            axis=axis_style,
+            scale=alt.Scale(domain=[0, 100]),
+            title="Stress Composite Index"
+        ),
+        tooltip=[
+            "date:T",
+            alt.Tooltip("stress_composite:Q", format=".2f", label="Stress Score"),
+            alt.Tooltip("stress_regime:N", label="Regime")
+        ]
+    )
+
+    stress_chart = alt.layer(bands, rules, line).interactive()
     
     st.altair_chart(stress_chart, width="stretch")
     
@@ -749,15 +792,58 @@ except Exception as e:
         )
     
     # Stress composite chart
-    stress_chart = alt.Chart(stress_df.reset_index()).mark_line().encode(
-        x=alt.X('date:T', axis=axis_style),
-        y=alt.Y('stress_composite:Q', axis=axis_style),
-        color=alt.Color('stress_regime:N', scale=alt.Scale(
-            domain=['Low Stress', 'Moderate Stress', 'High Stress', 'Crisis'],
-            range=['green', 'yellow', 'orange', 'red']
-        )),
-        tooltip=['date:T', 'stress_composite:Q', 'stress_regime:N']
-    ).interactive()
+    df_reset = stress_df.reset_index()
+    min_date = df_reset["date"].min()
+    max_date = df_reset["date"].max()
+
+    bands_df = pd.DataFrame([
+        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "color": "rgba(76, 175, 80, 0.06)",  "regime": "Low Stress"},
+        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "color": "rgba(255, 235, 59, 0.08)", "regime": "Moderate Stress"},
+        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "color": "rgba(255, 152, 0, 0.12)",  "regime": "High Stress"},
+        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "color": "rgba(244, 67, 54, 0.15)",  "regime": "Crisis"}
+    ])
+
+    rules_df = pd.DataFrame({"y": [25, 50, 75]})
+
+    bands = alt.Chart(bands_df).mark_rect().encode(
+        x=alt.X("start:T", axis=None),
+        x2=alt.X2("end:T"),
+        y=alt.Y("ymin:Q", axis=None),
+        y2=alt.Y2("ymax:Q"),
+        color=alt.Color("color:N", scale=None),
+        tooltip=alt.value(None)
+    )
+
+    rules = alt.Chart(rules_df).mark_rule(
+        color="#31333F",
+        strokeWidth=1.5,
+        strokeDash=[4, 4]
+    ).encode(
+        y=alt.Y("y:Q")
+    )
+
+    line = alt.Chart(df_reset).mark_line(
+        color="#00E5FF",
+        strokeWidth=2.5
+    ).encode(
+        x=alt.X(
+            "date:T",
+            axis=axis_style
+        ),
+        y=alt.Y(
+            "stress_composite:Q",
+            axis=axis_style,
+            scale=alt.Scale(domain=[0, 100]),
+            title="Stress Composite Index"
+        ),
+        tooltip=[
+            "date:T",
+            alt.Tooltip("stress_composite:Q", format=".2f", label="Stress Score"),
+            alt.Tooltip("stress_regime:N", label="Regime")
+        ]
+    )
+
+    stress_chart = alt.layer(bands, rules, line).interactive()
     
     st.altair_chart(stress_chart, width="stretch")
     
