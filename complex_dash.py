@@ -1,29 +1,60 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sat Mar 28 13:11:41 2026
 
-@author: randall
+"""
+complex_dash.py
+
+Production-grade Streamlit macro / crypto dashboard
+with real market stress composite integration.
 """
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Mar 28 00:48:26 2026
-Streamlit Dashboard for Market Data
-@author: randall
-"""
-import yfinance as yf
-import pandas as pd
-import requests
+import os
+import time
 import datetime
-import streamlit as st
+import requests
 
-FRED_API_KEY = "c1bb49f53350af1c4195497fa3f1c38a"
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import streamlit as st
+import altair as alt
+
+from dotenv import load_dotenv
+
+from metrics.stress_composite import (
+    build_stress_composite,
+    latest_stress_snapshot
+)
+
+# -----------------------------------------------------------------------------
+# ENVIRONMENT
+# -----------------------------------------------------------------------------
+
+load_dotenv()
+
+FRED_API_KEY = os.getenv("FRED_API_KEY")
+
+if not FRED_API_KEY:
+    st.error(
+        "FRED_API_KEY not found in environment variables."
+    )
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# DATE RANGE
+# -----------------------------------------------------------------------------
 
 TODAY = datetime.date.today()
+
 END_DATE = TODAY - datetime.timedelta(days=1)
-START_DATE = END_DATE - datetime.timedelta(days=60)
+
+# IMPORTANT:
+# Need enough history for rolling windows
+START_DATE = END_DATE - datetime.timedelta(days=365)
+
+# -----------------------------------------------------------------------------
+# FRED SERIES
+# -----------------------------------------------------------------------------
 
 SERIES = {
     "SOFR": "SOFR",
@@ -31,401 +62,753 @@ SERIES = {
     "DGS10": "DGS10"
 }
 
-# ------------------------
-# Functions
-# ------------------------
-def get_fred_series(series_id):
-    url = "https://api.stlouisfed.org/fred/series/observations"
+# -----------------------------------------------------------------------------
+# HEALTH CHECKS
+# -----------------------------------------------------------------------------
+
+def check_fred_api():
+
+    try:
+
+        url = (
+            "https://api.stlouisfed.org/"
+            "fred/series/observations"
+        )
+
+        params = {
+            "series_id": "DFF",
+            "api_key": FRED_API_KEY,
+            "file_type": "json",
+            "observation_start": "2024-01-01",
+            "observation_end": "2024-01-02"
+        }
+
+        response = requests.get(
+            url,
+            params=params,
+            timeout=5
+        )
+
+        if response.status_code == 200:
+
+            data = response.json()
+
+            if (
+                "observations" in data
+                and len(data["observations"]) > 0
+            ):
+                return True, "FRED API: OK"
+
+        return False, (
+            f"FRED API: Error "
+            f"{response.status_code}"
+        )
+
+    except Exception as e:
+
+        return (
+            False,
+            f"FRED API: Connection failed "
+            f"({str(e)[:50]}...)"
+        )
+
+
+def check_stablecoins_api():
+
+    try:
+
+        url = (
+            "https://stablecoins.llama.fi/"
+            "stablecoincharts/all"
+        )
+
+        response = requests.get(
+            url,
+            timeout=5
+        )
+
+        if response.status_code == 200:
+
+            data = response.json()
+
+            if isinstance(data, list) and len(data) > 0:
+                return True, "Stablecoins API: OK"
+
+        return (
+            False,
+            f"Stablecoins API: "
+            f"Error {response.status_code}"
+        )
+
+    except Exception as e:
+
+        return (
+            False,
+            f"Stablecoins API: "
+            f"Connection failed "
+            f"({str(e)[:50]}...)"
+        )
+
+
+def check_yfinance_api():
+
+    try:
+
+        spy = yf.download(
+            "SPY",
+            period="1d",
+            progress=False
+        )
+
+        if not spy.empty:
+            return True, "Yahoo Finance: OK"
+
+        return False, "Yahoo Finance: No data returned"
+
+    except Exception as e:
+
+        return (
+            False,
+            f"Yahoo Finance: Connection failed "
+            f"({str(e)[:50]}...)"
+        )
+
+# -----------------------------------------------------------------------------
+# DATA FETCHERS
+# -----------------------------------------------------------------------------
+
+def get_fred_series(series_name, series_id):
+
+    url = (
+        "https://api.stlouisfed.org/"
+        "fred/series/observations"
+    )
+
     params = {
         "series_id": series_id,
         "api_key": FRED_API_KEY,
         "file_type": "json",
-        "observation_start": START_DATE.strftime("%Y-%m-%d"),
-        "observation_end": END_DATE.strftime("%Y-%m-%d")
+        "observation_start":
+            START_DATE.strftime("%Y-%m-%d"),
+        "observation_end":
+            END_DATE.strftime("%Y-%m-%d")
     }
+
     response = requests.get(url, params=params)
+
     data = response.json()
-    
+
     df = pd.DataFrame(data["observations"])
-    df["date"] = pd.to_datetime(df["date"]).dt.date
-    df[series_id] = pd.to_numeric(df["value"], errors="coerce")
-    return df[["date", series_id]]
+
+    df["date"] = pd.to_datetime(df["date"])
+
+    df["value"] = pd.to_numeric(
+        df["value"],
+        errors="coerce"
+    )
+
+    df.rename(
+        columns={"value": series_name},
+        inplace=True
+    )
+
+    return df[["date", series_name]]
+
 
 def get_stablecoin_marketcap():
-    url = "https://stablecoins.llama.fi/stablecoincharts/all"
-    response = requests.get(url)
-    data = response.json()
-    
-    records = []
-   
-    for entry in data:
-        date = datetime.datetime.fromtimestamp(int(entry["date"])).date()
-        total_circulating = entry.get("totalCirculatingUSD", {})
-        total_usd = sum(total_circulating.values())
-        records.append({"date": date, "Stablecoin Mkt Cap": total_usd})
-        
-    df = pd.DataFrame(records)
 
-    # Filter range
-    df = df[(df["date"] >= START_DATE) & (df["date"] <= END_DATE)]
+    try:
 
-    # Convert to datetime index
-    df["date"] = pd.to_datetime(df["date"])
-    df.set_index("date", inplace=True)
+        url = (
+            "https://stablecoins.llama.fi/"
+            "stablecoincharts/all"
+        )
 
-    # Align to business days (take last available value)
-    df = df.resample("B").last()
+        response = requests.get(url, timeout=10)
 
-    df.reset_index(inplace=True)
-    df["date"] = df["date"].dt.date
+        response.raise_for_status()
 
-    return df
-        
+        data = response.json()
 
-# ------------------------
-# Build Master DataFrame
-# ------------------------
-date_range = pd.bdate_range(start=START_DATE, end=END_DATE)
-master_df = pd.DataFrame({"date": date_range.date})
+        records = []
 
-# Merge FRED data
-for name, series_id in SERIES.items():
-    df = get_fred_series(series_id)
-    master_df = master_df.merge(df, on="date", how="left")
+        for entry in data:
 
-# Merge stablecoin data
+            date = datetime.datetime.fromtimestamp(
+                int(entry["date"])
+            )
+
+            total_circulating = entry.get(
+                "totalCirculatingUSD",
+                {}
+            )
+
+            total_usd = sum(
+                total_circulating.values()
+            )
+
+            records.append({
+                "date": date,
+                "Stablecoin Mkt Cap": total_usd
+            })
+
+        df = pd.DataFrame(records)
+
+        df = df[
+            (df["date"] >= pd.Timestamp(START_DATE))
+            &
+            (df["date"] <= pd.Timestamp(END_DATE))
+        ]
+
+        df.set_index("date", inplace=True)
+
+        df = df.resample("B").last()
+
+        df.ffill(inplace=True)
+
+        df.reset_index(inplace=True)
+
+        return df
+
+    except Exception as e:
+
+        st.warning(
+            f"Stablecoin API error: {str(e)}"
+        )
+
+        return pd.DataFrame(
+            columns=[
+                "date",
+                "Stablecoin Mkt Cap"
+            ]
+        )
+
+# -----------------------------------------------------------------------------
+# MASTER DATAFRAME
+# -----------------------------------------------------------------------------
+
+date_range = pd.bdate_range(
+    start=START_DATE,
+    end=END_DATE
+)
+
+master_df = pd.DataFrame({
+    "date": date_range
+})
+
+# -----------------------------------------------------------------------------
+# MERGE FRED DATA
+# -----------------------------------------------------------------------------
+
+for display_name, fred_id in SERIES.items():
+
+    fred_df = get_fred_series(
+        display_name,
+        fred_id
+    )
+
+    master_df = master_df.merge(
+        fred_df,
+        on="date",
+        how="left"
+    )
+
+# -----------------------------------------------------------------------------
+# MERGE STABLECOIN DATA
+# -----------------------------------------------------------------------------
+
 stable_df = get_stablecoin_marketcap()
-master_df = master_df.merge(stable_df, on="date", how="left")
 
-# Handle missing data
-master_df = master_df.sort_values("date")
+master_df = master_df.merge(
+    stable_df,
+    on="date",
+    how="left"
+)
+
+master_df.sort_values(
+    "date",
+    inplace=True
+)
+
 master_df.ffill(inplace=True)
 
-# ------------------------
-# Fetch SPY and VIX Data
-# ------------------------
-spy = yf.download("SPY", start=START_DATE, end=END_DATE, progress=False)
-vix = yf.download("^VIX", start=START_DATE, end=END_DATE, progress=False)
-# ------------------------
-# Fetch GLD Data
-# ------------------------
-#gld = yf.download("GLD", start=START_DATE, end=END_DATE, progress=False)
-# ------------------------
-# Fetch ETF / Market Data
-# ------------------------
-gld  = yf.download("GLD",  start=START_DATE, end=END_DATE, progress=False)
-vtip = yf.download("VTIP", start=START_DATE, end=END_DATE, progress=False)
-tlt  = yf.download("TLT",  start=START_DATE, end=END_DATE, progress=False)
+# -----------------------------------------------------------------------------
+# YAHOO FINANCE DATA
+# -----------------------------------------------------------------------------
 
-crcl = yf.download("CRCL", start=START_DATE, end=END_DATE, progress=False)
-dram = yf.download("DRAM", start=START_DATE, end=END_DATE, progress=False)
-jnk  = yf.download("JNK",  start=START_DATE, end=END_DATE, progress=False)
-emb  = yf.download("EMB",  start=START_DATE, end=END_DATE, progress=False)
-# Reset index and standardize
-gld = gld.reset_index()[["Date", "Close"]]
-gld.columns = ["date", "GLD"]
-gld["date"] = pd.to_datetime(gld["date"])
+def fetch_yf_series(ticker, column_name):
 
-# VTIP
-vtip = vtip.reset_index()[["Date", "Close"]]
-vtip.columns = ["date", "VTIP"]
-vtip["date"] = pd.to_datetime(vtip["date"])
+    df = yf.download(
+        ticker,
+        start=START_DATE,
+        end=END_DATE,
+        progress=False
+    )
 
-# TLT
-tlt = tlt.reset_index()[["Date", "Close"]]
-tlt.columns = ["date", "TLT"]
-tlt["date"] = pd.to_datetime(tlt["date"])
+    df = df.reset_index()[["Date", "Close"]]
 
-# CRCL
-crcl = crcl.reset_index()[["Date", "Close"]]
-crcl.columns = ["date", "CRCL"]
-crcl["date"] = pd.to_datetime(crcl["date"])
+    df.columns = ["date", column_name]
 
-# DRAM
-dram = dram.reset_index()[["Date", "Close"]]
-dram.columns = ["date", "DRAM"]
-dram["date"] = pd.to_datetime(dram["date"])
+    df["date"] = pd.to_datetime(df["date"])
 
-# JNK
-jnk = jnk.reset_index()[["Date", "Close"]]
-jnk.columns = ["date", "JNK"]
-jnk["date"] = pd.to_datetime(jnk["date"])
+    return df
 
-# EMB
-emb = emb.reset_index()[["Date", "Close"]]
-emb.columns = ["date", "EMB"]
-emb["date"] = pd.to_datetime(emb["date"])
 
-# Reset index and standardize
-spy = spy.reset_index()[["Date", "Close"]]
-spy.columns = ["date", "SPY"]
-spy["date"] = pd.to_datetime(spy["date"])
+spy  = fetch_yf_series("SPY", "SPY")
+vix  = fetch_yf_series("^VIX", "VIX")
+gld  = fetch_yf_series("GLD", "GLD")
+vtip = fetch_yf_series("VTIP", "VTIP")
+tlt  = fetch_yf_series("TLT", "TLT")
+crcl = fetch_yf_series("CRCL", "CRCL")
+dram = fetch_yf_series("DRAM", "DRAM")
+jnk  = fetch_yf_series("JNK", "JNK")
+emb  = fetch_yf_series("EMB", "EMB")
+btc  = fetch_yf_series("BTC-USD", "BTC")
 
-vix = vix.reset_index()[["Date", "Close"]]
-vix.columns = ["date", "VIX"]
-vix["date"] = pd.to_datetime(vix["date"])
+# -----------------------------------------------------------------------------
+# DERIVED METRICS
+# -----------------------------------------------------------------------------
 
-# Calculate SOFR spread
-master_df["SOFR_Spread"] = master_df["SOFR"] - master_df["DFF"]
-master_df.rename(columns={"DFF": "FFR"}, inplace=True)
+master_df["SOFR_Spread"] = (
+    master_df["SOFR"] -
+    master_df["FFR"]
+)
 
-# ------------------------
-# Streamlit Dashboard
-# ------------------------
-st.set_page_config(page_title="Market Dashboard", layout="wide")
+# -----------------------------------------------------------------------------
+# STREAMLIT
+# -----------------------------------------------------------------------------
+
+st.set_page_config(
+    page_title="Market Dashboard",
+    layout="wide"
+)
+
 st.title("📊 Market Data Dashboard")
 
-st.markdown(f"Data from **{START_DATE}** to **{END_DATE}**")
+# -----------------------------------------------------------------------------
+# SIDEBAR HEALTH
+# -----------------------------------------------------------------------------
 
-# Show raw data
-if st.checkbox("Show raw data"):
-    st.dataframe(master_df)
+with st.sidebar:
 
-import altair as alt
+    st.subheader("🔧 System Health")
+
+    if "health_checks" not in st.session_state:
+
+        st.session_state.health_checks = {}
+
+        st.session_state.last_check = 0
+
+    current_time = time.time()
+
+    if (
+        current_time -
+        st.session_state.last_check > 30
+        or not st.session_state.health_checks
+    ):
+
+        with st.spinner("Checking APIs..."):
+
+            fred_ok, fred_msg = check_fred_api()
+
+            stable_ok, stable_msg = (
+                check_stablecoins_api()
+            )
+
+            yahoo_ok, yahoo_msg = (
+                check_yfinance_api()
+            )
+
+            st.session_state.health_checks = {
+                "FRED": (fred_ok, fred_msg),
+                "Stablecoins": (
+                    stable_ok,
+                    stable_msg
+                ),
+                "Yahoo": (
+                    yahoo_ok,
+                    yahoo_msg
+                )
+            }
+
+            st.session_state.last_check = current_time
+
+    for service, (ok, msg) in (
+        st.session_state.health_checks.items()
+    ):
+
+        if ok:
+            st.success(f"✅ {msg}")
+        else:
+            st.error(f"❌ {msg}")
+
+# -----------------------------------------------------------------------------
+# ALTAIR THEME
+# -----------------------------------------------------------------------------
+
+def custom_theme():
+
+    return {
+        "config": {
+            "axis": {
+                "grid": True,
+                "gridColor": "#31333F",
+                "domainColor": "#31333F",
+                "tickColor": "#31333F",
+                "labelColor": "white",
+                "titleColor": "white"
+            },
+            "view": {
+                "stroke": "transparent"
+            },
+            "background": "#0E1117"
+        }
+    }
+
+alt.themes.register(
+    "custom_theme",
+    custom_theme
+)
+
+alt.themes.enable("custom_theme")
 
 axis_style = alt.Axis(
-    labelColor="black",
-    titleColor="black",
+    labelColor="#e6eaf1",
+    titleColor="#e6eaf1",
     labelFontSize=12,
     titleFontSize=14,
     titleFontWeight="bold",
-    gridColor="lightgray"
+    gridColor="#31333F"
 )
-# Line charts
-# Separate the DSG10 line chart from the SOFR - FFR chart and expand the y-axis scale
-st.subheader("10-Year Treasury Yield (DGS10)")
 
-dgs_min = master_df["DGS10"].min()
-dgs_max = master_df["DGS10"].max()
-padding = (dgs_max - dgs_min) * 0.1  # 10% padding
+# -----------------------------------------------------------------------------
+# BASIC CHARTS
+# -----------------------------------------------------------------------------
 
-# Make the axis labels dark and easier to read using axis_style
-chart_dgs10 = alt.Chart(master_df).mark_line().encode(
-    x=alt.X("date:T", axis=axis_style),
+st.subheader("10Y Treasury Yield")
+
+chart_dgs10 = alt.Chart(
+    master_df
+).mark_line().encode(
+
+    x=alt.X(
+        "date:T",
+        axis=axis_style
+    ),
+
     y=alt.Y(
         "DGS10:Q",
-        scale=alt.Scale(domain=[dgs_min - padding, dgs_max + padding]),
         axis=axis_style
     ),
-    tooltip=["date:T", "DGS10:Q"]
+
+    tooltip=[
+        "date:T",
+        "DGS10:Q"
+    ]
+
 ).interactive()
 
+st.altair_chart(
+    chart_dgs10,
+    width="stretch"
+)
 
-st.altair_chart(chart_dgs10, width="stretch")
+# -----------------------------------------------------------------------------
+# STRESS COMPOSITE
+# -----------------------------------------------------------------------------
 
-st.subheader("SOFR vs FFR (Zoomed Spread View)")
+st.subheader(
+    "📈 Market Stress Composite Index"
+)
 
-# Melt data for Altair
-rates_df = master_df[["date", "SOFR", "FFR"]].melt(id_vars="date")
+try:
 
-# Tight y-axis around the two series
-min_rate = rates_df["value"].min()
-max_rate = rates_df["value"].max()
+    # -------------------------------------------------------------------------
+    # REAL INPUT SERIES
+    # -------------------------------------------------------------------------
 
-# Expand slightly so lines aren’t on borders
-padding = (max_rate - min_rate) * 0.5  # exaggerates spread visibility
+    vix_series = (
+        vix
+        .set_index("date")["VIX"]
+        .astype(float)
+    )
 
+    jnk_series = (
+        jnk
+        .set_index("date")["JNK"]
+        .astype(float)
+    )
 
-# Make chart with axis_style and designate line colors red and blue
-chart_rates = alt.Chart(rates_df).mark_line().encode(
-    x=alt.X("date:T", axis=axis_style),
-    y=alt.Y(
-        "value:Q",
-        scale=alt.Scale(domain=[min_rate - padding, max_rate + padding]),
-        axis=axis_style
-    ),
-    color=alt.Color(
-        "variable:N",
-        scale=alt.Scale(
-            domain=["SOFR", "FFR"],
-            range=["red", "blue"]
+    tlt_series = (
+        tlt
+        .set_index("date")["TLT"]
+        .astype(float)
+    )
+
+    stablecoin_series = (
+        master_df
+        .set_index("date")[
+            "Stablecoin Mkt Cap"
+        ]
+        .astype(float)
+    )
+
+    btc["returns"] = (
+        btc["BTC"]
+        .pct_change()
+    )
+
+    btc_returns = (
+        btc
+        .set_index("date")[
+            "returns"
+        ]
+    )
+
+    # -------------------------------------------------------------------------
+    # CREDIT STRESS PROXY
+    # -------------------------------------------------------------------------
+
+    credit_proxy = (
+        (tlt_series / jnk_series)
+        .pct_change()
+        .rolling(5)
+        .mean()
+    )
+
+    # -------------------------------------------------------------------------
+    # STABLECOIN DOMINANCE PROXY
+    # -------------------------------------------------------------------------
+
+    stablecoin_dominance = (
+        stablecoin_series
+        .pct_change()
+        .rolling(7)
+        .mean()
+    )
+
+    # -------------------------------------------------------------------------
+    # FUNDING PROXY
+    # -------------------------------------------------------------------------
+
+    funding_proxy = (
+        btc_returns
+        .rolling(3)
+        .mean()
+        * 0.05
+    )
+
+    # -------------------------------------------------------------------------
+    # ALIGN SERIES
+    # -------------------------------------------------------------------------
+
+    stress_inputs = pd.concat([
+        vix_series.rename("vix"),
+        credit_proxy.rename("credit"),
+        stablecoin_dominance.rename(
+            "stablecoin"
         ),
-        legend=alt.Legend(title="Rate")
-    ),
-    tooltip=["date:T", "variable:N", "value:Q"]
-).interactive()
+        btc_returns.rename(
+            "btc_returns"
+        ),
+        funding_proxy.rename(
+            "funding"
+        )
+    ], axis=1)
 
+    stress_inputs.sort_index(
+        inplace=True
+    )
 
-st.altair_chart(chart_rates, width="stretch")
+    stress_inputs.ffill(
+        inplace=True
+    )
 
-st.subheader("SOFR Spread (SOFR - FFR)")
-st.line_chart(master_df[["date", "SOFR_Spread"]].set_index("date"))
+    stress_inputs.dropna(
+        inplace=True
+    )
 
-st.subheader("Stablecoin Market Cap (USD) — Zoomed View")
+    # -------------------------------------------------------------------------
+    # BUILD COMPOSITE
+    # -------------------------------------------------------------------------
 
-sc_min = master_df["Stablecoin Mkt Cap"].min()
-sc_max = master_df["Stablecoin Mkt Cap"].max()
+    stress_df = build_stress_composite(
+        vix=stress_inputs["vix"],
+        baa_aaa_spread=stress_inputs[
+            "credit"
+        ],
+        stablecoin_dominance=stress_inputs[
+            "stablecoin"
+        ],
+        btc_returns=stress_inputs[
+            "btc_returns"
+        ],
+        funding_rate=stress_inputs[
+            "funding"
+        ]
+    )
 
-# Add small padding so the line isn't touching edges
-padding = (sc_max - sc_min) * 0.1
+    stress_df.dropna(inplace=True)
 
-# Make chart with axis_style and pad scale
-chart_stable = alt.Chart(master_df).mark_line().encode(
-    x=alt.X("date:T", axis=axis_style),
-    y=alt.Y(
-        "Stablecoin Mkt Cap:Q",
-        scale=alt.Scale(domain=[sc_min - padding, sc_max + padding]),
-        axis=axis_style
-    ),
-    tooltip=["date:T", "Stablecoin Mkt Cap:Q"]
-).interactive()
+    # -------------------------------------------------------------------------
+    # SNAPSHOT
+    # -------------------------------------------------------------------------
 
-st.altair_chart(chart_stable, width="stretch")
+    snapshot = latest_stress_snapshot(
+        stress_df
+    )
 
-# Show percent change in Stablecoin Market Cap chart
+    # -------------------------------------------------------------------------
+    # METRICS
+    # -------------------------------------------------------------------------
 
-master_df["Stablecoin % Change"] = master_df["Stablecoin Mkt Cap"].pct_change() * 100
+    col1, col2, col3, col4, col5 = (
+        st.columns(5)
+    )
 
-st.subheader("Stablecoin Market Cap (% Change)")
+    with col1:
 
-# Make chart with axis_style
-chart_pct = alt.Chart(master_df).mark_line().encode(
-    x=alt.X("date:T", axis=axis_style),
-    y=alt.Y("Stablecoin % Change:Q", axis=axis_style),
-    tooltip=["date:T", "Stablecoin % Change:Q"]
-).interactive()
+        st.metric(
+            "Stress Score",
+            f"{snapshot['stress_score']}"
+        )
 
-st.altair_chart(chart_pct, width="stretch")
+    with col2:
 
+        st.metric(
+            "Regime",
+            snapshot["regime"]
+        )
 
+    with col3:
 
+        st.metric(
+            "VIX Stress",
+            f"{snapshot['vix_score']}"
+        )
 
-# Optional: Altair interactive chart
-import altair as alt
+    with col4:
 
-st.subheader("VIX Index Daily Price")
+        st.metric(
+            "Credit Stress",
+            f"{snapshot['credit_score']}"
+        )
 
-chart_vix = alt.Chart(vix).mark_line().encode(
-    x=alt.X("date:T", axis=axis_style),
-    y=alt.Y("VIX:Q", axis=axis_style),
-    tooltip=["date:T", "VIX:Q"]
-).interactive()
+    with col5:
 
-st.altair_chart(chart_vix, width="stretch")
+        st.metric(
+            "Stablecoin Stress",
+            f"{snapshot['stablecoin_score']}"
+        )
 
-st.subheader("SPY ETF Daily Price")
+    # -------------------------------------------------------------------------
+    # STRESS CHART
+    # -------------------------------------------------------------------------
 
-chart_spy = alt.Chart(spy).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "SPY:Q",
-        scale=alt.Scale(domain=[600, 800])   # 👈 THIS IS THE KEY
-    ),
-    tooltip=["date:T", "SPY:Q"]
-).interactive()
+    stress_chart = alt.Chart(
+        stress_df.reset_index()
+    ).mark_line().encode(
 
-st.altair_chart(chart_spy, width="stretch")
+        x=alt.X(
+            "date:T",
+            axis=axis_style
+        ),
 
-st.subheader("GLD ETF Daily Price")
+        y=alt.Y(
+            "stress_composite:Q",
+            axis=axis_style
+        ),
 
-chart_gld = alt.Chart(gld).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "GLD:Q",
-        scale=alt.Scale(zero=False)  # keeps movement visible
-    ),
-    tooltip=["date:T", "GLD:Q"]
-).interactive()
+        color=alt.Color(
+            "stress_regime:N",
+            scale=alt.Scale(
+                domain=[
+                    "Low Stress",
+                    "Moderate Stress",
+                    "High Stress",
+                    "Crisis"
+                ],
+                range=[
+                    "green",
+                    "yellow",
+                    "orange",
+                    "red"
+                ]
+            )
+        ),
 
-st.altair_chart(chart_gld, width="stretch")
+        tooltip=[
+            "date:T",
+            "stress_composite:Q",
+            "stress_regime:N"
+        ]
 
-# ------------------------
-# VTIP Chart
-# ------------------------
-st.subheader("VTIP ETF Daily Price")
+    ).interactive()
 
-chart_vtip = alt.Chart(vtip).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "VTIP:Q",
-        scale=alt.Scale(zero=False)
-    ),
-    tooltip=["date:T", "VTIP:Q"]
-).interactive()
+    st.altair_chart(
+        stress_chart,
+        width="stretch"
+    )
 
-st.altair_chart(chart_vtip, width="stretch")
+    # -------------------------------------------------------------------------
+    # COMPONENT BREAKDOWN
+    # -------------------------------------------------------------------------
 
+    st.subheader(
+        "Component Breakdown"
+    )
 
-# ------------------------
-# TLT Chart
-# ------------------------
-st.subheader("TLT ETF Daily Price")
+    component_data = (
+        stress_df[[
+            "vix_score",
+            "credit_score",
+            "stablecoin_score",
+            "btc_vol_score",
+            "funding_score"
+        ]]
+        .reset_index()
+    )
 
-chart_tlt = alt.Chart(tlt).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "TLT:Q",
-        scale=alt.Scale(zero=False)
-    ),
-    tooltip=["date:T", "TLT:Q"]
-).interactive()
+    component_melted = (
+        component_data.melt(
+            id_vars=["date"],
+            var_name="component",
+            value_name="score"
+        )
+    )
 
-st.altair_chart(chart_tlt, width="stretch")
+    component_chart = alt.Chart(
+        component_melted
+    ).mark_line().encode(
 
+        x=alt.X(
+            "date:T",
+            axis=axis_style
+        ),
 
-# ------------------------
-# CRCL Chart
-# ------------------------
-st.subheader("CRCL Daily Price")
+        y=alt.Y(
+            "score:Q",
+            axis=axis_style
+        ),
 
-chart_crcl = alt.Chart(crcl).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "CRCL:Q",
-        scale=alt.Scale(zero=False)
-    ),
-    tooltip=["date:T", "CRCL:Q"]
-).interactive()
+        color="component:N",
 
-st.altair_chart(chart_crcl, width="stretch")
+        tooltip=[
+            "date:T",
+            "component:N",
+            "score:Q"
+        ]
 
+    ).interactive()
 
-# ------------------------
-# DRAM Chart
-# ------------------------
-st.subheader("DRAM Daily Price")
+    st.altair_chart(
+        component_chart,
+        width="stretch"
+    )
 
-chart_dram = alt.Chart(dram).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "DRAM:Q",
-        scale=alt.Scale(zero=False)
-    ),
-    tooltip=["date:T", "DRAM:Q"]
-).interactive()
+except Exception as e:
 
-st.altair_chart(chart_dram, width="stretch")
-
-
-# ------------------------
-# JNK Chart
-# ------------------------
-st.subheader("JNK ETF Daily Price")
-
-chart_jnk = alt.Chart(jnk).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "JNK:Q",
-        scale=alt.Scale(zero=False)
-    ),
-    tooltip=["date:T", "JNK:Q"]
-).interactive()
-
-st.altair_chart(chart_jnk, width="stretch")
-
-
-# ------------------------
-# EMB Chart
-# ------------------------
-st.subheader("EMB ETF Daily Price")
-
-chart_emb = alt.Chart(emb).mark_line().encode(
-    x=alt.X("date:T"),
-    y=alt.Y(
-        "EMB:Q",
-        scale=alt.Scale(zero=False)
-    ),
-    tooltip=["date:T", "EMB:Q"]
-).interactive()
-
-st.altair_chart(chart_emb, width="stretch")
+    st.error(
+        f"Error generating stress composite: "
+        f"{str(e)}"
+    )

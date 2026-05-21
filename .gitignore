@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Streamlit
+streamlit.log
+
+# Environments
+.env
+.env.local
+
+# Virtual environments
+.venv/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS/IDE
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
