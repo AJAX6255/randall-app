@@ -203,17 +203,76 @@ try:
     ]
 
     # -------------------------------------------------------------------------
-    # USER SELECTION
+    # REGIME TEMPLATES & QUICK SELECTION
     # -------------------------------------------------------------------------
+
+    REGIME_TEMPLATES = {
+        "Custom Selection (No Template)": None,
+        "Classic Risk-On Equity Rally": ["SPY", "JNK", "DRAM", "BTC"],
+        "Flight to Safety / Risk-Off": ["TLT", "GLD", "VIX", "SPY"],
+        "Credit Stress Event": ["JNK", "EMB", "TLT", "SOFR_Spread"],
+        "Banking / Funding Stress": ["SOFR", "FFR", "SOFR_Spread", "DGS10"],
+        "Liquidity Expansion / QE-like Environment": ["BTC", "Stablecoin Mkt Cap", "SPY", "DRAM"],
+        "Crypto Leverage Bubble": ["BTC", "Stablecoin Mkt Cap", "CRCL", "VIX"],
+        "Inflation Fear / Stagflation": ["GLD", "VTIP", "TLT", "DGS10"],
+        "Deflationary Shock": ["TLT", "DGS10", "SPY", "BTC"],
+        "Emerging Market Stress": ["EMB", "DGS10", "GLD"],
+        "Semiconductor / AI Expansion Cycle": ["DRAM", "SPY", "BTC"],
+        "Stablecoin Confidence Crisis": ["Stablecoin Mkt Cap", "CRCL", "BTC", "GLD"],
+        "Treasury Market Instability": ["DGS10", "TLT", "SOFR", "SOFR_Spread"],
+        "Carry Trade Unwind": ["BTC", "JNK", "EMB", "VIX"],
+        "Soft Landing / Controlled Disinflation": ["SPY", "VTIP", "DGS10", "GLD"],
+        "Liquidity Drain / QT Environment": ["BTC", "Stablecoin Mkt Cap", "SOFR", "FFR"],
+        "Commodity Inflation Cycle": ["GLD", "DGS10", "VTIP", "SPY"],
+        "Speculative Mania": ["BTC", "DRAM", "CRCL", "SPY"],
+        "Pre-Recession Warning": ["JNK", "TLT", "DGS10", "SPY"],
+        "Systemic Market Stress Composite": ["VIX", "SPY", "TLT", "Stablecoin Mkt Cap", "SOFR_Spread"],
+        "Crypto/TradFi Decoupling": ["BTC", "SPY", "GLD"]
+    }
+
+    # Initialize session state for selected columns if not present
+    if "selected_series" not in st.session_state:
+        st.session_state.selected_series = ["SPY", "VIX"]
+    if "prev_template" not in st.session_state:
+        st.session_state.prev_template = "Custom Selection (No Template)"
+
+    # Determine matched template based on currently selected series
+    current_selection = sorted(st.session_state.selected_series)
+    matched_template = "Custom Selection (No Template)"
+    for name, cols in REGIME_TEMPLATES.items():
+        if cols is not None and sorted(cols) == current_selection:
+            matched_template = name
+            break
+
+    template_list = list(REGIME_TEMPLATES.keys())
+    template_index = template_list.index(matched_template) if matched_template in template_list else 0
+
+    col_select, col_norm = st.columns([3, 1])
+
+    with col_select:
+        selected_template = st.selectbox(
+            "💡 Quick-Plot Macro Regime Templates",
+            options=template_list,
+            index=template_index,
+            help="Select a macro regime to automatically load the recommended plot combination."
+        )
+
+    # Handle template selection changes
+    if selected_template != st.session_state.prev_template:
+        st.session_state.prev_template = selected_template
+        if REGIME_TEMPLATES[selected_template] is not None:
+            st.session_state.selected_series = REGIME_TEMPLATES[selected_template]
 
     selected_columns = st.multiselect(
         "Select market series to plot",
         options=available_columns,
-        default=["SPY", "VIX"]
+        key="selected_series"
     )
 
-    # Normalize option
-    normalize = st.checkbox("Normalize Series (Percent Change from First)", value=False)
+    with col_norm:
+        st.write("")  # Visual spacing
+        st.write("")
+        normalize = st.checkbox("Normalize Series (Percent Change)", value=False)
 
     # -------------------------------------------------------------------------
     # PLOT
@@ -292,6 +351,42 @@ try:
     # for name, chart in additional_charts.items():
     #     st.subheader(name)
     #     st.altair_chart(chart, width="stretch")
+
+    # -------------------------------------------------------------------------
+    # MACRO REGIMES REFERENCE TABLE
+    # -------------------------------------------------------------------------
+    
+    st.write("---")  # Divider
+    
+    with st.expander("📖 View Macro Regimes & Recommended Plotting Combinations Reference", expanded=True):
+        st.markdown("""
+### 🧠 Macro Regime Quick Reference Guide
+
+Use the combinations below in the **Market Chart Explorer** (or select a template above) to analyze different market conditions.
+
+| Market Regime / Signal | Most Useful Plot Combination | Why This Combination Works |
+| :--- | :--- | :--- |
+| **Classic Risk-On Equity Rally** | `SPY` + `JNK` + `DRAM` + `BTC` | Growth assets, credit risk appetite, semiconductors, and crypto all rising together typically indicate expanding liquidity and bullish sentiment. |
+| **Flight to Safety / Risk-Off** | `TLT` + `GLD` + `VIX` + `SPY` | Treasuries and gold rising while equities weaken and volatility spikes is the classic macro panic configuration. |
+| **Credit Stress Event** | `JNK` + `EMB` + `TLT` + `SOFR_Spread` | Junk bonds and emerging market debt weaken while Treasuries outperform and funding spreads widen. Useful for detecting early liquidity fractures. |
+| **Banking / Funding Stress** | `SOFR` + `FFR` + `SOFR_Spread` + `DGS10` | SOFR dislocations versus the Fed Funds Rate can indicate short-term funding instability similar to repo or banking stress conditions. |
+| **Liquidity Expansion / QE-like Environment** | `BTC` + `Stablecoin Mkt Cap` + `SPY` + `DRAM` | Expanding stablecoin capitalization alongside crypto, semiconductors, and equities often signals broad speculative liquidity expansion. |
+| **Crypto Leverage Bubble** | `BTC` + `Stablecoin Mkt Cap` + `CRCL` + `VIX` | Rapid stablecoin growth with surging BTC and stablecoin-related equities while volatility remains suppressed can indicate leverage overheating. |
+| **Inflation Fear / Stagflation** | `GLD` + `VTIP` + `TLT` + `DGS10` | Gold and inflation-protected securities outperform while long-duration Treasuries weaken and yields rise. |
+| **Deflationary Shock** | `TLT` + `DGS10` + `SPY` + `BTC` | Long-duration Treasuries rally aggressively while yields collapse and risk assets weaken. |
+| **Emerging Market Stress** | `EMB` + `DGS10` + `GLD` | EM debt weakness combined with dollar assets indicates dollar funding pressure globally. |
+| **Semiconductor / AI Expansion Cycle** | `DRAM` + `SPY` + `BTC` | High-beta technology and crypto often move together during liquidity-fueled AI and semiconductor expansion phases. |
+| **Stablecoin Confidence Crisis** | `Stablecoin Mkt Cap` + `CRCL` + `BTC` + `GLD` | Falling stablecoin capitalization alongside crypto weakness and rising gold can indicate loss of trust in crypto liquidity plumbing. |
+| **Treasury Market Instability** | `DGS10` + `TLT` + `SOFR` + `SOFR_Spread` | Sharp yield volatility combined with funding spread stress can indicate Treasury market dysfunction. |
+| **Carry Trade Unwind** | `BTC` + `JNK` + `EMB` + `VIX` | High-beta risk assets falling together while volatility spikes is typical of leveraged carry unwinds. |
+| **Soft Landing / Controlled Disinflation** | `SPY` + `VTIP` + `DGS10` + `GLD` | Equities remain stable while inflation expectations moderate and yields stabilize. |
+| **Liquidity Drain / QT Environment** | `BTC` + `Stablecoin Mkt Cap` + `SOFR` + `FFR` | Falling crypto liquidity with elevated short-term rates often reflects tightening monetary conditions. |
+| **Commodity Inflation Cycle** | `GLD` + `DGS10` + `VTIP` + `SPY` | Gold and inflation hedges strengthen while equities become more sector-selective under rising rates. |
+| **Speculative Mania** | `BTC` + `DRAM` + `CRCL` + `SPY` | High-beta speculative assets all accelerating together often precede overheating conditions. |
+| **Pre-Recession Warning** | `JNK` + `TLT` + `DGS10` + `SPY` | Credit deterioration, falling yields, Treasury strength, and weakening equities are classic recession precursors. |
+| **Systemic Market Stress Composite** | `VIX` + `SPY` + `TLT` + `Stablecoin Mkt Cap` + `SOFR_Spread` | Captures simultaneous equity stress, liquidity strain, volatility spikes, and crypto funding deterioration. |
+| **Crypto/TradFi Decoupling** | `BTC` + `SPY` + `GLD` | Useful for identifying whether crypto is behaving as a macro risk asset or an alternative monetary asset. |
+""")
     
 except Exception as e:
     st.error(f"Error in dashboard: {str(e)}")
