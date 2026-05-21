@@ -666,19 +666,19 @@ try:
     rules_df = pd.DataFrame({"y": [25, 50, 75]})
 
     bands = alt.Chart(bands_df).mark_rect().encode(
-        x=alt.X("start:T", axis=axis_style),
+        x=alt.X("start:T", axis=axis_style, title=None),
         x2=alt.X2("end:T"),
         y=alt.Y("ymin:Q", axis=None),
         y2=alt.Y2("ymax:Q"),
         color=alt.Color(
             "regime:N",
             scale=alt.Scale(
-                domain=["Low Stress", "Moderate Stress", "High Stress", "Crisis"],
+                domain=["Crisis", "High Stress", "Moderate Stress", "Low Stress"],
                 range=[
-                    "rgba(76, 175, 80, 0.12)",   # Low Stress (Green)
-                    "rgba(255, 235, 59, 0.16)",  # Moderate Stress (Yellow)
-                    "rgba(255, 152, 0, 0.22)",   # High Stress (Orange)
-                    "rgba(244, 67, 54, 0.30)"    # Crisis (Red)
+                    "rgba(244, 67, 54, 0.45)",   # Crisis (Red)
+                    "rgba(255, 152, 0, 0.33)",   # High Stress (Orange)
+                    "rgba(255, 235, 59, 0.24)",  # Moderate Stress (Yellow)
+                    "rgba(76, 175, 80, 0.16)"    # Low Stress (Green)
                 ]
             ),
             legend=alt.Legend(
@@ -707,7 +707,8 @@ try:
     ).encode(
         x=alt.X(
             "date:T",
-            axis=axis_style
+            axis=axis_style,
+            title=None
         ),
         y=alt.Y(
             "stress_composite:Q",
@@ -825,19 +826,19 @@ except Exception as e:
     rules_df = pd.DataFrame({"y": [25, 50, 75]})
 
     bands = alt.Chart(bands_df).mark_rect().encode(
-        x=alt.X("start:T", axis=axis_style),
+        x=alt.X("start:T", axis=axis_style, title=None),
         x2=alt.X2("end:T"),
         y=alt.Y("ymin:Q", axis=None),
         y2=alt.Y2("ymax:Q"),
         color=alt.Color(
             "regime:N",
             scale=alt.Scale(
-                domain=["Low Stress", "Moderate Stress", "High Stress", "Crisis"],
+                domain=["Crisis", "High Stress", "Moderate Stress", "Low Stress"],
                 range=[
-                    "rgba(76, 175, 80, 0.12)",   # Low Stress (Green)
-                    "rgba(255, 235, 59, 0.16)",  # Moderate Stress (Yellow)
-                    "rgba(255, 152, 0, 0.22)",   # High Stress (Orange)
-                    "rgba(244, 67, 54, 0.30)"    # Crisis (Red)
+                    "rgba(244, 67, 54, 0.45)",   # Crisis (Red)
+                    "rgba(255, 152, 0, 0.33)",   # High Stress (Orange)
+                    "rgba(255, 235, 59, 0.24)",  # Moderate Stress (Yellow)
+                    "rgba(76, 175, 80, 0.16)"    # Low Stress (Green)
                 ]
             ),
             legend=alt.Legend(
@@ -866,7 +867,8 @@ except Exception as e:
     ).encode(
         x=alt.X(
             "date:T",
-            axis=axis_style
+            axis=axis_style,
+            title=None
         ),
         y=alt.Y(
             "stress_composite:Q",
