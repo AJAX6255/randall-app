@@ -149,8 +149,8 @@ def create_stress_composite_chart(stress_df):
         ),
         tooltip=[
             "date:T",
-            alt.Tooltip("stress_composite:Q", format=".2f", label="Stress Score"),
-            alt.Tooltip("stress_regime:N", label="Regime")
+            alt.Tooltip("stress_composite:Q", format=".2f", title="Stress Score"),
+            alt.Tooltip("stress_regime:N", title="Regime")
         ]
     )
 

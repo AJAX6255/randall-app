@@ -241,7 +241,7 @@ try:
             tooltip_fields = [
                 "date:T",
                 "Series:N",
-                alt.Tooltip("Value:Q", format=".2f", label="Normalized Value (%)")
+                alt.Tooltip("Value:Q", format=".2f", title="Normalized Value (%)")
             ]
             y_axis_label = "Normalized Value (Starting at 100)"
         else:

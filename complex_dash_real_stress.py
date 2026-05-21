@@ -698,8 +698,8 @@ try:
         ),
         tooltip=[
             "date:T",
-            alt.Tooltip("stress_composite:Q", format=".2f", label="Stress Score"),
-            alt.Tooltip("stress_regime:N", label="Regime")
+            alt.Tooltip("stress_composite:Q", format=".2f", title="Stress Score"),
+            alt.Tooltip("stress_regime:N", title="Regime")
         ]
     )
 
@@ -838,8 +838,8 @@ except Exception as e:
         ),
         tooltip=[
             "date:T",
-            alt.Tooltip("stress_composite:Q", format=".2f", label="Stress Score"),
-            alt.Tooltip("stress_regime:N", label="Regime")
+            alt.Tooltip("stress_composite:Q", format=".2f", title="Stress Score"),
+            alt.Tooltip("stress_regime:N", title="Regime")
         ]
     )
 
