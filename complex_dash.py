@@ -710,20 +710,39 @@ try:
     max_date = df_reset["date"].max()
 
     bands_df = pd.DataFrame([
-        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "color": "rgba(76, 175, 80, 0.06)",  "regime": "Low Stress"},
-        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "color": "rgba(255, 235, 59, 0.08)", "regime": "Moderate Stress"},
-        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "color": "rgba(255, 152, 0, 0.12)",  "regime": "High Stress"},
-        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "color": "rgba(244, 67, 54, 0.15)",  "regime": "Crisis"}
+        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "regime": "Low Stress"},
+        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "regime": "Moderate Stress"},
+        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "regime": "High Stress"},
+        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "regime": "Crisis"}
     ])
 
     rules_df = pd.DataFrame({"y": [25, 50, 75]})
 
     bands = alt.Chart(bands_df).mark_rect().encode(
-        x=alt.X("start:T", axis=None),
+        x=alt.X("start:T", axis=axis_style),
         x2=alt.X2("end:T"),
         y=alt.Y("ymin:Q", axis=None),
         y2=alt.Y2("ymax:Q"),
-        color=alt.Color("color:N", scale=None),
+        color=alt.Color(
+            "regime:N",
+            scale=alt.Scale(
+                domain=["Low Stress", "Moderate Stress", "High Stress", "Crisis"],
+                range=[
+                    "rgba(76, 175, 80, 0.12)",   # Low Stress (Green)
+                    "rgba(255, 235, 59, 0.16)",  # Moderate Stress (Yellow)
+                    "rgba(255, 152, 0, 0.22)",   # High Stress (Orange)
+                    "rgba(244, 67, 54, 0.30)"    # Crisis (Red)
+                ]
+            ),
+            legend=alt.Legend(
+                title="Stress Regime",
+                orient="right",
+                labelColor="white",
+                titleColor="white",
+                labelFontSize=11,
+                titleFontSize=12
+            )
+        ),
         tooltip=alt.value(None)
     )
 
