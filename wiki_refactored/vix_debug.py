@@ -55,9 +55,15 @@ def main():
                 st.error("No VIX data returned from Yahoo Finance")
                 return
                 
-            vix_df = vix_raw.reset_index()[["Date", "Close"]]
+            vix_raw = vix_raw.reset_index()
+            if isinstance(vix_raw.columns, pd.MultiIndex):
+                vix_raw.columns = [col[0] for col in vix_raw.columns]
+            vix_raw.columns = [str(col).lower() for col in vix_raw.columns]
+            vix_df = vix_raw[['date', 'close']].copy()
             vix_df.columns = ["date", "VIX Index (Volatility)"]
             vix_df["date"] = pd.to_datetime(vix_df["date"])
+            if vix_df["date"].dt.tz is not None:
+                vix_df["date"] = vix_df["date"].dt.tz_localize(None)
             
             st.success(f"Successfully fetched {len(vix_df)} rows of VIX data")
             

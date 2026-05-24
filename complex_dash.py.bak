@@ -345,31 +345,11 @@ def fetch_yf_series(ticker, column_name):
         progress=False
     )
 
-    if df.empty:
-        return pd.DataFrame(columns=["date", column_name])
+    df = df.reset_index()[["Date", "Close"]]
 
-    df = df.reset_index()
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [col[0] for col in df.columns]
-    df.columns = [str(col).lower() for col in df.columns]
-
-    date_col = 'date' if 'date' in df.columns else df.columns[0]
-
-    close_candidates = ['close', 'adj close', 'adjclose']
-    close_col = None
-    for candidate in close_candidates:
-        if candidate in df.columns:
-            close_col = candidate
-            break
-    if close_col is None:
-        close_col = df.columns[1]
-
-    df = df[[date_col, close_col]].copy()
     df.columns = ["date", column_name]
 
     df["date"] = pd.to_datetime(df["date"])
-    if df["date"].dt.tz is not None:
-        df["date"] = df["date"].dt.tz_localize(None)
 
     return df
 
@@ -725,78 +705,45 @@ try:
     # STRESS CHART
     # -------------------------------------------------------------------------
 
-    df_reset = stress_df.reset_index()
-    min_date = df_reset["date"].min()
-    max_date = df_reset["date"].max()
+    stress_chart = alt.Chart(
+        stress_df.reset_index()
+    ).mark_line().encode(
 
-    bands_df = pd.DataFrame([
-        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "regime": "Low Stress"},
-        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "regime": "Moderate Stress"},
-        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "regime": "High Stress"},
-        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "regime": "Crisis"}
-    ])
-
-    rules_df = pd.DataFrame({"y": [25, 50, 75]})
-
-    bands = alt.Chart(bands_df).mark_rect().encode(
-        x=alt.X("start:T", axis=axis_style, title=None),
-        x2=alt.X2("end:T"),
-        y=alt.Y("ymin:Q", axis=None),
-        y2=alt.Y2("ymax:Q"),
-        color=alt.Color(
-            "regime:N",
-            scale=alt.Scale(
-                domain=["Crisis", "High Stress", "Moderate Stress", "Low Stress"],
-                range=[
-                    "rgba(244, 67, 54, 0.45)",   # Crisis (Red)
-                    "rgba(255, 152, 0, 0.33)",   # High Stress (Orange)
-                    "rgba(255, 235, 59, 0.24)",  # Moderate Stress (Yellow)
-                    "rgba(76, 175, 80, 0.16)"    # Low Stress (Green)
-                ]
-            ),
-            legend=alt.Legend(
-                title="Stress Regime",
-                orient="right",
-                labelColor="white",
-                titleColor="white",
-                labelFontSize=11,
-                titleFontSize=12
-            )
-        ),
-        tooltip=alt.value(None)
-    )
-
-    rules = alt.Chart(rules_df).mark_rule(
-        color="#31333F",
-        strokeWidth=1.5,
-        strokeDash=[4, 4]
-    ).encode(
-        y=alt.Y("y:Q")
-    )
-
-    line = alt.Chart(df_reset).mark_line(
-        color="#00E5FF",
-        strokeWidth=2.5
-    ).encode(
         x=alt.X(
             "date:T",
-            axis=axis_style,
-            title=None
+            axis=axis_style
         ),
+
         y=alt.Y(
             "stress_composite:Q",
-            axis=axis_style,
-            scale=alt.Scale(domain=[0, 100]),
-            title="Stress Composite Index"
+            axis=axis_style
         ),
+
+        color=alt.Color(
+            "stress_regime:N",
+            scale=alt.Scale(
+                domain=[
+                    "Low Stress",
+                    "Moderate Stress",
+                    "High Stress",
+                    "Crisis"
+                ],
+                range=[
+                    "green",
+                    "yellow",
+                    "orange",
+                    "red"
+                ]
+            )
+        ),
+
         tooltip=[
             "date:T",
-            alt.Tooltip("stress_composite:Q", format=".2f", title="Stress Score"),
-            alt.Tooltip("stress_regime:N", title="Regime")
+            "stress_composite:Q",
+            "stress_regime:N"
         ]
-    )
 
-    stress_chart = alt.layer(bands, rules, line).interactive()
+    ).interactive()
 
     st.altair_chart(
         stress_chart,

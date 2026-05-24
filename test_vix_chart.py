@@ -54,9 +54,15 @@ def test_vix_chart_creation():
             if df.empty:
                 print(f"No data returned for {name} ({symbol}) from Yahoo Finance")
                 return pd.DataFrame(columns=["date", name])
-            df = df.reset_index()[["Date", "Close"]]
+            df = df.reset_index()
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [col[0] for col in df.columns]
+            df.columns = [str(col).lower() for col in df.columns]
+            df = df[['date', 'close']].copy()
             df.columns = ["date", name]
             df["date"] = pd.to_datetime(df["date"])
+            if df["date"].dt.tz is not None:
+                df["date"] = df["date"].dt.tz_localize(None)
             return df
         except Exception as e:
             print(f"Error fetching {name} ({symbol}) from Yahoo Finance: {str(e)}")
@@ -117,9 +123,15 @@ def test_vix_chart_creation():
     try:
         # Recreate the vix dataframe as in original code
         vix_raw = yf.download("^VIX", start=START_DATE, end=END_DATE, progress=False)
-        vix_orig = vix_raw.reset_index()[["Date", "Close"]]
+        vix_raw = vix_raw.reset_index()
+        if isinstance(vix_raw.columns, pd.MultiIndex):
+            vix_raw.columns = [col[0] for col in vix_raw.columns]
+        vix_raw.columns = [str(col).lower() for col in vix_raw.columns]
+        vix_orig = vix_raw[['date', 'close']].copy()
         vix_orig.columns = ["date", "VIX"]
         vix_orig["date"] = pd.to_datetime(vix_orig["date"])
+        if vix_orig["date"].dt.tz is not None:
+            vix_orig["date"] = vix_orig["date"].dt.tz_localize(None)
         
         axis_style = create_axis_style()
         chart_vix = alt.Chart(vix_orig).mark_line().encode(

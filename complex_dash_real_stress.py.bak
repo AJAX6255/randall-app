@@ -180,39 +180,49 @@ crcl = yf.download("CRCL", start=START_DATE, end=END_DATE, progress=False)
 dram = yf.download("DRAM", start=START_DATE, end=END_DATE, progress=False)
 jnk  = yf.download("JNK",  start=START_DATE, end=END_DATE, progress=False)
 emb  = yf.download("EMB",  start=START_DATE, end=END_DATE, progress=False)
-def process_yf_df(df, column_name):
-    if df.empty:
-        return pd.DataFrame(columns=["date", column_name])
-    df = df.reset_index()
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [col[0] for col in df.columns]
-    df.columns = [str(col).lower() for col in df.columns]
-    date_col = 'date' if 'date' in df.columns else df.columns[0]
-    close_candidates = ['close', 'adj close', 'adjclose']
-    close_col = None
-    for candidate in close_candidates:
-        if candidate in df.columns:
-            close_col = candidate
-            break
-    if close_col is None:
-        close_col = df.columns[1]
-    df = df[[date_col, close_col]].copy()
-    df.columns = ["date", column_name]
-    df["date"] = pd.to_datetime(df["date"])
-    if df["date"].dt.tz is not None:
-        df["date"] = df["date"].dt.tz_localize(None)
-    return df
+# Reset index and standardize
+gld = gld.reset_index()[["Date", "Close"]]
+gld.columns = ["date", "GLD"]
+gld["date"] = pd.to_datetime(gld["date"])
+
+# VTIP
+vtip = vtip.reset_index()[["Date", "Close"]]
+vtip.columns = ["date", "VTIP"]
+vtip["date"] = pd.to_datetime(vtip["date"])
+
+# TLT
+tlt = tlt.reset_index()[["Date", "Close"]]
+tlt.columns = ["date", "TLT"]
+tlt["date"] = pd.to_datetime(tlt["date"])
+
+# CRCL
+crcl = crcl.reset_index()[["Date", "Close"]]
+crcl.columns = ["date", "CRCL"]
+crcl["date"] = pd.to_datetime(crcl["date"])
+
+# DRAM
+dram = dram.reset_index()[["Date", "Close"]]
+dram.columns = ["date", "DRAM"]
+dram["date"] = pd.to_datetime(dram["date"])
+
+# JNK
+jnk = jnk.reset_index()[["Date", "Close"]]
+jnk.columns = ["date", "JNK"]
+jnk["date"] = pd.to_datetime(jnk["date"])
+
+# EMB
+emb = emb.reset_index()[["Date", "Close"]]
+emb.columns = ["date", "EMB"]
+emb["date"] = pd.to_datetime(emb["date"])
 
 # Reset index and standardize
-gld = process_yf_df(gld, "GLD")
-vtip = process_yf_df(vtip, "VTIP")
-tlt = process_yf_df(tlt, "TLT")
-crcl = process_yf_df(crcl, "CRCL")
-dram = process_yf_df(dram, "DRAM")
-jnk = process_yf_df(jnk, "JNK")
-emb = process_yf_df(emb, "EMB")
-spy = process_yf_df(spy, "SPY")
-vix = process_yf_df(vix, "VIX")
+spy = spy.reset_index()[["Date", "Close"]]
+spy.columns = ["date", "SPY"]
+spy["date"] = pd.to_datetime(spy["date"])
+
+vix = vix.reset_index()[["Date", "Close"]]
+vix.columns = ["date", "VIX"]
+vix["date"] = pd.to_datetime(vix["date"])
 
 # Calculate SOFR spread
 master_df["SOFR_Spread"] = master_df["SOFR"] - master_df["DFF"]
@@ -562,7 +572,9 @@ try:
     # BTC returns (we don't have BTC data yet, let's add it)
     btc_data = yf.download("BTC-USD", start=START_DATE, end=END_DATE, progress=False)
     if not btc_data.empty:
-        btc_data = process_yf_df(btc_data, "BTC")
+        btc_data = btc_data.reset_index()[["Date", "Close"]]
+        btc_data.columns = ["date", "BTC"]
+        btc_data["date"] = pd.to_datetime(btc_data["date"])
         btc_returns_series = btc_data.set_index("date")["BTC"].pct_change()
     else:
         # Fallback if BTC download fails
@@ -640,78 +652,15 @@ try:
         )
     
     # Stress composite chart
-    df_reset = stress_df.reset_index()
-    min_date = df_reset["date"].min()
-    max_date = df_reset["date"].max()
-
-    bands_df = pd.DataFrame([
-        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "regime": "Low Stress"},
-        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "regime": "Moderate Stress"},
-        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "regime": "High Stress"},
-        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "regime": "Crisis"}
-    ])
-
-    rules_df = pd.DataFrame({"y": [25, 50, 75]})
-
-    bands = alt.Chart(bands_df).mark_rect().encode(
-        x=alt.X("start:T", axis=axis_style, title=None),
-        x2=alt.X2("end:T"),
-        y=alt.Y("ymin:Q", axis=None),
-        y2=alt.Y2("ymax:Q"),
-        color=alt.Color(
-            "regime:N",
-            scale=alt.Scale(
-                domain=["Crisis", "High Stress", "Moderate Stress", "Low Stress"],
-                range=[
-                    "rgba(244, 67, 54, 0.45)",   # Crisis (Red)
-                    "rgba(255, 152, 0, 0.33)",   # High Stress (Orange)
-                    "rgba(255, 235, 59, 0.24)",  # Moderate Stress (Yellow)
-                    "rgba(76, 175, 80, 0.16)"    # Low Stress (Green)
-                ]
-            ),
-            legend=alt.Legend(
-                title="Stress Regime",
-                orient="right",
-                labelColor="white",
-                titleColor="white",
-                labelFontSize=11,
-                titleFontSize=12
-            )
-        ),
-        tooltip=alt.value(None)
-    )
-
-    rules = alt.Chart(rules_df).mark_rule(
-        color="#31333F",
-        strokeWidth=1.5,
-        strokeDash=[4, 4]
-    ).encode(
-        y=alt.Y("y:Q")
-    )
-
-    line = alt.Chart(df_reset).mark_line(
-        color="#00E5FF",
-        strokeWidth=2.5
-    ).encode(
-        x=alt.X(
-            "date:T",
-            axis=axis_style,
-            title=None
-        ),
-        y=alt.Y(
-            "stress_composite:Q",
-            axis=axis_style,
-            scale=alt.Scale(domain=[0, 100]),
-            title="Stress Composite Index"
-        ),
-        tooltip=[
-            "date:T",
-            alt.Tooltip("stress_composite:Q", format=".2f", title="Stress Score"),
-            alt.Tooltip("stress_regime:N", title="Regime")
-        ]
-    )
-
-    stress_chart = alt.layer(bands, rules, line).interactive()
+    stress_chart = alt.Chart(stress_df.reset_index()).mark_line().encode(
+        x=alt.X('date:T', axis=axis_style),
+        y=alt.Y('stress_composite:Q', axis=axis_style),
+        color=alt.Color('stress_regime:N', scale=alt.Scale(
+            domain=['Low Stress', 'Moderate Stress', 'High Stress', 'Crisis'],
+            range=['green', 'yellow', 'orange', 'red']
+        )),
+        tooltip=['date:T', 'stress_composite:Q', 'stress_regime:N']
+    ).interactive()
     
     st.altair_chart(stress_chart, width="stretch")
     
@@ -800,78 +749,15 @@ except Exception as e:
         )
     
     # Stress composite chart
-    df_reset = stress_df.reset_index()
-    min_date = df_reset["date"].min()
-    max_date = df_reset["date"].max()
-
-    bands_df = pd.DataFrame([
-        {"start": min_date, "end": max_date, "ymin": 0,  "ymax": 25,  "regime": "Low Stress"},
-        {"start": min_date, "end": max_date, "ymin": 25, "ymax": 50,  "regime": "Moderate Stress"},
-        {"start": min_date, "end": max_date, "ymin": 50, "ymax": 75,  "regime": "High Stress"},
-        {"start": min_date, "end": max_date, "ymin": 75, "ymax": 100, "regime": "Crisis"}
-    ])
-
-    rules_df = pd.DataFrame({"y": [25, 50, 75]})
-
-    bands = alt.Chart(bands_df).mark_rect().encode(
-        x=alt.X("start:T", axis=axis_style, title=None),
-        x2=alt.X2("end:T"),
-        y=alt.Y("ymin:Q", axis=None),
-        y2=alt.Y2("ymax:Q"),
-        color=alt.Color(
-            "regime:N",
-            scale=alt.Scale(
-                domain=["Crisis", "High Stress", "Moderate Stress", "Low Stress"],
-                range=[
-                    "rgba(244, 67, 54, 0.45)",   # Crisis (Red)
-                    "rgba(255, 152, 0, 0.33)",   # High Stress (Orange)
-                    "rgba(255, 235, 59, 0.24)",  # Moderate Stress (Yellow)
-                    "rgba(76, 175, 80, 0.16)"    # Low Stress (Green)
-                ]
-            ),
-            legend=alt.Legend(
-                title="Stress Regime",
-                orient="right",
-                labelColor="white",
-                titleColor="white",
-                labelFontSize=11,
-                titleFontSize=12
-            )
-        ),
-        tooltip=alt.value(None)
-    )
-
-    rules = alt.Chart(rules_df).mark_rule(
-        color="#31333F",
-        strokeWidth=1.5,
-        strokeDash=[4, 4]
-    ).encode(
-        y=alt.Y("y:Q")
-    )
-
-    line = alt.Chart(df_reset).mark_line(
-        color="#00E5FF",
-        strokeWidth=2.5
-    ).encode(
-        x=alt.X(
-            "date:T",
-            axis=axis_style,
-            title=None
-        ),
-        y=alt.Y(
-            "stress_composite:Q",
-            axis=axis_style,
-            scale=alt.Scale(domain=[0, 100]),
-            title="Stress Composite Index"
-        ),
-        tooltip=[
-            "date:T",
-            alt.Tooltip("stress_composite:Q", format=".2f", title="Stress Score"),
-            alt.Tooltip("stress_regime:N", title="Regime")
-        ]
-    )
-
-    stress_chart = alt.layer(bands, rules, line).interactive()
+    stress_chart = alt.Chart(stress_df.reset_index()).mark_line().encode(
+        x=alt.X('date:T', axis=axis_style),
+        y=alt.Y('stress_composite:Q', axis=axis_style),
+        color=alt.Color('stress_regime:N', scale=alt.Scale(
+            domain=['Low Stress', 'Moderate Stress', 'High Stress', 'Crisis'],
+            range=['green', 'yellow', 'orange', 'red']
+        )),
+        tooltip=['date:T', 'stress_composite:Q', 'stress_regime:N']
+    ).interactive()
     
     st.altair_chart(stress_chart, width="stretch")
     

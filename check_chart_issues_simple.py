@@ -19,9 +19,15 @@ def check_chart_issues():
     START_DATE = END_DATE - timedelta(days=60)
     
     vix_raw = yf.download("^VIX", start=START_DATE, end=END_DATE, progress=False)
-    vix_df = vix_raw.reset_index()[["Date", "Close"]]
+    vix_raw = vix_raw.reset_index()
+    if isinstance(vix_raw.columns, pd.MultiIndex):
+        vix_raw.columns = [col[0] for col in vix_raw.columns]
+    vix_raw.columns = [str(col).lower() for col in vix_raw.columns]
+    vix_df = vix_raw[['date', 'close']].copy()
     vix_df.columns = ["date", "VIX Index (Volatility)"]
     vix_df["date"] = pd.to_datetime(vix_df["date"])
+    if vix_df["date"].dt.tz is not None:
+        vix_df["date"] = vix_df["date"].dt.tz_localize(None)
     
     print("VIX data: {} rows".format(vix_df.shape[0]))
     print("Date range: {} to {}".format(vix_df['date'].min(), vix_df['date'].max()))
@@ -121,9 +127,15 @@ def check_chart_issues():
     print("\n4. Comparing with SPY chart (known to work):")
     try:
         spy_raw = yf.download("SPY", start=START_DATE, end=END_DATE, progress=False)
-        spy_df = spy_raw.reset_index()[["Date", "Close"]]
+        spy_raw = spy_raw.reset_index()
+        if isinstance(spy_raw.columns, pd.MultiIndex):
+            spy_raw.columns = [col[0] for col in spy_raw.columns]
+        spy_raw.columns = [str(col).lower() for col in spy_raw.columns]
+        spy_df = spy_raw[['date', 'close']].copy()
         spy_df.columns = ["date", "SPY ETF (S&P 500)"]
         spy_df["date"] = pd.to_datetime(spy_df["date"])
+        if spy_df["date"].dt.tz is not None:
+            spy_df["date"] = spy_df["date"].dt.tz_localize(None)
         
         spy_chart = alt.Chart(spy_df).mark_line().encode(
             x='date:T',

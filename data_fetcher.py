@@ -193,9 +193,31 @@ def fetch_yf_series(ticker, column_name):
         pd.DataFrame: DataFrame with date and column_name columns
     """
     df = yf.download(ticker, start=START_DATE, end=END_DATE, progress=False)
-    df = df.reset_index()[["Date", "Close"]]
+    
+    if df.empty:
+        return pd.DataFrame(columns=["date", column_name])
+        
+    df = df.reset_index()
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0] for col in df.columns]
+    df.columns = [str(col).lower() for col in df.columns]
+    
+    date_col = 'date' if 'date' in df.columns else df.columns[0]
+    
+    close_candidates = ['close', 'adj close', 'adjclose']
+    close_col = None
+    for candidate in close_candidates:
+        if candidate in df.columns:
+            close_col = candidate
+            break
+    if close_col is None:
+        close_col = df.columns[1]
+        
+    df = df[[date_col, close_col]].copy()
     df.columns = ["date", column_name]
     df["date"] = pd.to_datetime(df["date"])
+    if df["date"].dt.tz is not None:
+        df["date"] = df["date"].dt.tz_localize(None)
     return df
 
 # -----------------------------------------------------------------------------
