@@ -12,6 +12,7 @@ venv.bak/
 
 # Streamlit
 streamlit.log
+.streamlit/secrets.toml
 
 # Environments
 .env
