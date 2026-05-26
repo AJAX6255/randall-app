@@ -27,12 +27,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-FRED_API_KEY = os.getenv("FRED_API_KEY")
+
+def get_fred_api_key():
+    """Retrieve the FRED API key from the environment or Streamlit secrets."""
+    api_key = os.getenv("FRED_API_KEY")
+    if api_key:
+        return api_key
+
+    try:
+        import streamlit as st
+        api_key = st.secrets.get("FRED_API_KEY")
+        if api_key:
+            return api_key
+    except Exception:
+        pass
+
+    return None
+
+
+FRED_API_KEY = get_fred_api_key()
 
 if not FRED_API_KEY:
     # In Streamlit context, this would show an error and stop
     # For module use, we'll raise an exception to be handled upstream
-    raise ValueError("FRED_API_KEY not found in environment variables.")
+    raise ValueError("FRED_API_KEY not found in environment variables or Streamlit secrets.")
 
 # -----------------------------------------------------------------------------
 # DATE RANGE
