@@ -69,7 +69,7 @@ This dashboard was created to monitor crypto-crisis situations by tracking:
 
 3. **Run the dashboard**:
    ```bash
-   streamlit run complex_dash.py
+   streamlit run complex_dash_refactored.py
    ```
 
 ## Usage
